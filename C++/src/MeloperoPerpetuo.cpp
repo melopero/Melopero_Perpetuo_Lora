@@ -318,7 +318,7 @@ void MeloperoPerpetuo::blink_led(uint8_t times, uint32_t delay_ms) {
     
 void MeloperoPerpetuo::disableVsen(){
     
-    gpio_put(0, 1);
+    gpio_put(0, 0);
 }
 
 void MeloperoPerpetuo::printResponse() {
