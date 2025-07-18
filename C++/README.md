@@ -26,4 +26,4 @@ make
 
 ## Run
 
-After the build there will be a `<example>.uf2` file in the build folder. Copy this file to your perpetuo board. The sensei board should restart and run the code :party:.
+After the build there will be a `<example>.uf2` file in the build folder. Copy this file to your perpetuo board. The Perpetuo board should restart and run the code.
