@@ -21,6 +21,8 @@ mkdir build
 cd build
 export PICO_SDK_PATH=/path/to/pico-sdk
 cmake .. -DPICO_PLATFORM=rp2350 
+#Alternatively, in many cases, you can rely on the board configuration to set the platform for you. For example, passing -DPICO_BOARD=pico2 will automatically select PICO_PLATFORM=rp2350.
+
 make
 ```
 
