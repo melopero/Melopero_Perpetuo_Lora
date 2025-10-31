@@ -83,9 +83,14 @@ int main() {
 
 
     while (1) {
-        uint8_t data[] = {0x00, 0x00, 0xFF, 0xFF, 0x70, 0x71, 0x72, 0x73};
+        uint8_t data[] = {0x70, 0x71, 0x72, 0x73};
+        
+        // Transmit data, by default to broadcast address 0xFFFF and options 0x0000
+        //to specify a different destination address or options, use:
+        // melopero.transmitData(data, sizeof(data), dest_addr, options);   
         melopero.transmitData(data, sizeof(data));
-         sleep_ms(500);
+        
+        sleep_ms(500);
         printf("response to transmitData\n");
         melopero.printResponse();
         sleep_ms(6000);
