@@ -11,6 +11,9 @@ MeloperoPerpetuo::MeloperoPerpetuo() {
     mode = NetworkMode::None;
     network_running = false;
 
+    // Marks default EMB configuration as pending until first apply.
+    emb_config_pending = true;
+
 }
 
 // Destructor
@@ -416,4 +419,42 @@ void MeloperoPerpetuo::processExecStatus() const {
         printf("ACK RSSI: %d dBm\n", ack_rssi);
     }
 }
+
+void MeloperoPerpetuo::setEMBConfig(const EMBConfig& cfg) {
+    // Stores configuration (application occurs on startLoRaEMB()).
+    emb_config = cfg;
+    emb_config_pending = true;  // Marks configuration as pending.
+}
+
+EMBConfig MeloperoPerpetuo::getEMBConfig() const {
+    // Returns a copy of the stored configuration.
+    return emb_config;
+}
+
+bool MeloperoPerpetuo::validateEMBConfig(const EMBConfig& cfg) const {
+    // TX power: generic safe ceiling (adjust to module limits if needed).
+    if (cfg.power > 0x14) return false;
+
+    // Channel: generic 1..16 (adjust if your module provides a different map).
+    if (cfg.channel < 1 || cfg.channel > 16) return false;
+
+    // Spreading Factor: SF7..SF12.
+    if (cfg.sf < SPREADING_FACTOR_7 || cfg.sf > SPREADING_FACTOR_12) return false;
+
+    // Bandwidth: 125 or 250 kHz.
+    if (cfg.bw != BANDWIDTH_125 && cfg.bw != BANDWIDTH_250) return false;
+
+    // Coding rate: 4/5..4/8.
+    if (cfg.cr < CODING_RATE_4_5 || cfg.cr > CODING_RATE_4_8) return false;
+
+    // Optional Network ID coherence.
+    if (cfg.net_id_len > 0 && cfg.net_id == nullptr) return false;
+
+    // Energy save mode: 0..2 (ALWAYS_ON, RX_WINDOW, TX_ONLY).
+    if (cfg.energy > ENERGY_SAVE_MODE_TX_ONLY) return false;
+
+    return true;
+}
+
+
 

@@ -62,6 +62,20 @@
 // Network operating mode.
 enum class NetworkMode { None, LoRaEMB, LoRaWAN };
 
+// LoRa EMB runtime configuration. Defaults are valid at boot.
+struct EMBConfig {
+    uint8_t  power    = 0x0A;                  // TX power step (module-specific range)
+    uint8_t  channel  = 1;                     // Logical channel index
+    uint8_t  sf       = SPREADING_FACTOR_7;    // Spreading factor (SF7..SF12)
+    uint8_t  bw       = BANDWIDTH_125;         // Bandwidth (125/250 kHz)
+    uint8_t  cr       = CODING_RATE_4_5;       // Coding rate (4/5..4/8)
+    uint16_t net_addr = 0x1234;                // Network address (0x0000..0xFFFF)
+    const uint8_t* net_id = nullptr;           // Optional network ID pointer
+    size_t   net_id_len   = 0;                 // Optional network ID length
+    uint8_t  energy  = ENERGY_SAVE_MODE_TX_ONLY; // Energy save mode
+};
+
+
 
 class MeloperoPerpetuo {
 public:
@@ -95,6 +109,16 @@ public:
 
     // Returns the current network operating mode.
     NetworkMode getMode() const;
+
+    // Stores the given EMB configuration without applying it to the module.
+    void setEMBConfig(const EMBConfig& cfg);
+
+    // Returns the currently stored EMB configuration.
+    EMBConfig getEMBConfig() const;
+
+    // Validates the provided EMB configuration values.
+    bool validateEMBConfig(const EMBConfig& cfg) const;
+
 
 
     // Charger Status Functions
@@ -135,6 +159,11 @@ private:
     // Tracks the current network mode and whether the module is running.
     NetworkMode mode = NetworkMode::None;
     bool network_running = false;
+
+    // Last known EMB configuration (defaults at boot). Marked pending until applied.
+    EMBConfig emb_config{};
+    bool emb_config_pending = true;
+
 
 
     // Pins and Ports
