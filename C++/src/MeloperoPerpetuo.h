@@ -62,6 +62,10 @@
 // Network operating mode.
 enum class NetworkMode { None, LoRaEMB, LoRaWAN };
 
+// Generic return code for start/tx helpers.
+// 'InvalidArgs' is returned when the provided configuration is not valid.
+enum class TxStatus { Ok, InvalidArgs };
+
 // LoRa EMB runtime configuration. Defaults are valid at boot.
 struct EMBConfig {
     uint8_t  power    = 0x0A;                  // TX power step (module-specific range)
@@ -155,9 +159,7 @@ public:
     // Validates the provided EMB configuration values.
     bool validateEMBConfig(const EMBConfig& cfg) const;
 
-    // Generic return code for start/tx helpers.
-    // 'InvalidArgs' is returned when the provided configuration is not valid.
-    enum class TxStatus { Ok, InvalidArgs };
+ 
 
     // Starts LoRa EMB mode. When 'force' is true, the stored configuration is
     // reapplied even if it is already in sync. The sequence performs:
