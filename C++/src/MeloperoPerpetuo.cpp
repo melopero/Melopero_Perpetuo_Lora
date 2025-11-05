@@ -68,41 +68,38 @@ void MeloperoPerpetuo::sendCmd(uint8_t command, uint8_t* payload, size_t payload
 
 
 
-void MeloperoPerpetuo::transmitData(const uint8_t* data, size_t length, uint16_t dest_addr, uint16_t options) {
-    // Payload structure:
-    // [options_H][options_L][addr_H][addr_L][user_data...]
-    //
-    // Default values:
-    // options = 0x0000 → 00 00
-    // dest_addr = 0xFFFF → FF FF
-    //
-    // → Payload header: 00 00 FF FF + user data bytes
+void MeloperoPerpetuo::transmitEMB(const uint8_t* data,
+                                   size_t length,
+                                   uint16_t dest_addr,
+                                   uint16_t options) {
+    // Builds the EMB packet header and sends it through UART.
+    // Payload layout: [options_H][options_L][addr_H][addr_L][user_data...]
 
-    // Ensure the total packet does not exceed buffer size
     if (length + 4 > MAX_PACKET_SIZE) {
-        length = MAX_PACKET_SIZE - 4; // truncate safely
+        length = MAX_PACKET_SIZE - 4;  // Prevents overflow of internal buffer.
     }
 
     uint8_t payload[MAX_PACKET_SIZE];
     size_t idx = 0;
 
-    // Add "options" (big-endian)
+    // Add "options" field (big-endian).
     payload[idx++] = static_cast<uint8_t>((options >> 8) & 0xFF);
     payload[idx++] = static_cast<uint8_t>(options & 0xFF);
 
-    // Add destination address (big-endian)
+    // Add destination address (big-endian).
     payload[idx++] = static_cast<uint8_t>((dest_addr >> 8) & 0xFF);
     payload[idx++] = static_cast<uint8_t>(dest_addr & 0xFF);
 
-    // Copy user data after header
+    // Copy user data after the 4-byte header.
     if (data && length > 0) {
         memcpy(&payload[idx], data, length);
         idx += length;
     }
 
-    // Send the assembled payload through the standard LoRa command
+    // Sends the assembled frame to the module.
     sendCmd(CMD_SEND_DATA, payload, idx);
 }
+
 
 
 // LoRa Helper Functions

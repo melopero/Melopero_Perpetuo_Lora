@@ -87,8 +87,13 @@ public:
 
     // LoRa Module Functions
     void sendCmd(uint8_t command, uint8_t* payload = nullptr, size_t payloadLen = 0);
-    //void transmitData(uint8_t* data, size_t length);
-    void transmitData(const uint8_t* data, size_t length, uint16_t dest_addr = 0xFFFF, uint16_t options   = 0x0000);
+    // Sends user data over LoRa EMB using the current configuration.
+    // The header format is [options_H][options_L][addr_H][addr_L][payload...].
+    // By default, 'dest_addr' = 0xFFFF (broadcast) and 'options' = 0x0000.
+    void transmitEMB(const uint8_t* data,
+                    size_t length,
+                    uint16_t dest_addr = 0xFFFF,
+                    uint16_t options   = 0x0000);
 
 
     void reset();
