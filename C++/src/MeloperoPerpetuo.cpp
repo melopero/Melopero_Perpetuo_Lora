@@ -264,6 +264,41 @@ NetworkMode MeloperoPerpetuo::getMode() const {
     return mode;
 }
 
+void MeloperoPerpetuo::setLoRaWANConfig(const LoRaWANConfig& cfg) {
+    // Stores configuration (application occurs on startLoRaWAN()).
+    lorawan_config = cfg;
+    lorawan_config_pending = true;  // Marks configuration as pending.
+}
+
+LoRaWANConfig MeloperoPerpetuo::getLoRaWANConfig() const {
+    // Returns a copy of the stored configuration.
+    return lorawan_config;
+}
+
+bool MeloperoPerpetuo::validateLoRaWANConfig(const LoRaWANConfig& cfg) const {
+    // Region range check (module-specific; adjust mapping as required).
+    if (cfg.region > 0x02) return false; // example: 0x00=EU868, 0x01=US915, 0x02=2.4GHz
+
+    // Class check: accepts 0x01 (A) or 0x00 (C).
+    if (cfg.klass != 0x01 && cfg.klass != 0x00) return false;
+
+    // FPort range (LoRaWAN spec: 1..223 for application traffic).
+    if (cfg.default_fport == 0 || cfg.default_fport > 223) return false;
+
+    if (cfg.use_otaa) {
+        // OTAA requires JoinEUI(8), DevEUI(8), AppKey(16).
+        if (cfg.join_eui_len != 8 || cfg.dev_eui_len != 8 || cfg.app_key_len != 16) return false;
+        if (!cfg.join_eui || !cfg.dev_eui || !cfg.app_key) return false;
+    } else {
+        // ABP requires NwkSKey(16) and AppSKey(16). DevAddr may be 0 only if assigned later.
+        if (cfg.nwk_skey_len != 16 || cfg.app_skey_len != 16) return false;
+        if (!cfg.nwk_skey || !cfg.app_skey) return false;
+        // No strict check on dev_addr here; leave to application policy or region rules.
+    }
+
+    return true;
+}
+
 
 
 // Charger Status Functions

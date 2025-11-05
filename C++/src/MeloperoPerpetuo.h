@@ -75,6 +75,30 @@ struct EMBConfig {
     uint8_t  energy  = ENERGY_SAVE_MODE_TX_ONLY; // Energy save mode
 };
 
+// LoRaWAN runtime configuration. Defaults are usable but require credentials.
+struct LoRaWANConfig {
+    // Operation mode
+    bool     use_otaa        = true;   // true=OTAA, false=ABP
+    bool     adr             = true;   // Adaptive Data Rate
+    bool     auto_join       = true;   // OTAA: perform join automatically on start
+    uint8_t  klass           = 0x01;   // 0x01=Class A, 0x00=Class C
+    uint8_t  region          = 0x00;   // e.g., 0x00=EU868 (module-specific mapping)
+
+    // OTAA credentials (8+8+16 bytes). Pointers may be null when unused.
+    const uint8_t* join_eui  = nullptr; size_t join_eui_len = 0; // 8
+    const uint8_t* dev_eui   = nullptr; size_t dev_eui_len  = 0; // 8
+    const uint8_t* app_key   = nullptr; size_t app_key_len  = 0; // 16
+
+    // ABP credentials (DevAddr + 16+16 bytes). Keys may be null when unused.
+    uint32_t       dev_addr  = 0;
+    const uint8_t* nwk_skey  = nullptr; size_t nwk_skey_len = 0; // 16
+    const uint8_t* app_skey  = nullptr; size_t app_skey_len = 0; // 16
+
+    // Default uplink behavior
+    uint8_t  default_fport      = 1;    // Application port (1..223)
+    bool     default_confirmed  = false; // true=confirmed uplink, false=unconfirmed
+};
+
 
 
 class MeloperoPerpetuo {
@@ -134,6 +158,17 @@ public:
     TxStatus startLoRaEMB(bool force = false);
 
 
+    // Stores the given LoRaWAN configuration without applying it to the module.
+    void setLoRaWANConfig(const LoRaWANConfig& cfg);
+
+    // Returns the currently stored LoRaWAN configuration.
+    LoRaWANConfig getLoRaWANConfig() const;
+
+    // Validates the provided LoRaWAN configuration values.
+    bool validateLoRaWANConfig(const LoRaWANConfig& cfg) const;
+
+
+
 
 
     // Charger Status Functions
@@ -178,6 +213,11 @@ private:
     // Last known EMB configuration (defaults at boot). Marked pending until applied.
     EMBConfig emb_config{};
     bool emb_config_pending = true;
+
+    // Last known LoRaWAN configuration. Marked pending until applied.
+    LoRaWANConfig lorawan_config{};
+    bool lorawan_config_pending = true;
+
 
 
 
