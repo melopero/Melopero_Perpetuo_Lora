@@ -523,5 +523,57 @@ TxStatus MeloperoPerpetuo::startLoRaEMB(bool force) {
     return TxStatus::Ok;
 }
 
+TxStatus MeloperoPerpetuo::startLoRaWAN(bool force) {
+    // Skips unnecessary restart when already in LoRaWAN mode, configuration is
+    // applied, and no forced reapply is requested.
+    if (mode == NetworkMode::LoRaWAN && lorawan_config_pending == false && !force) {
+        return TxStatus::Ok;
+    }
+
+    // Validates the stored configuration before applying.
+    if (!validateLoRaWANConfig(lorawan_config)) {
+        return TxStatus::InvalidArgs;
+    }
+
+    // Stops network before changing radio options and credentials.
+    stopNetwork();
+
+    // Selects LoRaWAN and options (auto-join and ADR).
+    setNetworkPreferences(true, lorawan_config.auto_join, lorawan_config.adr);
+
+    // Maps LoRaWAN class to energy mode: A -> RX_WINDOW, C -> ALWAYS_ON.
+    const uint8_t energy = (lorawan_config.klass == 0x01)
+                         ? ENERGY_SAVE_MODE_RX_WINDOW
+                         : ENERGY_SAVE_MODE_ALWAYS_ON;
+    setEnergySaveMode(energy);
+
+    // (Optional) Set region if a dedicated command exists in your module.
+    // Example placeholder:
+    // sendCmd(CMD_SET_REGION, &lorawan_config.region, 1);
+
+    // Apply credentials:
+    if (lorawan_config.use_otaa) {
+        // OTAA requires JoinEUI(8), DevEUI(8), AppKey(16).
+        // Replace the following placeholders with your concrete setters or sendCmd:
+        // setJoinEUI(lorawan_config.join_eui);
+        // setDevEUI(lorawan_config.dev_eui);
+        // setAppKey(lorawan_config.app_key);
+    } else {
+        // ABP requires DevAddr, NwkSKey, AppSKey (16B each).
+        // Replace placeholders with your concrete setters or sendCmd:
+        // setDevAddr(lorawan_config.dev_addr);
+        // setNwkSKey(lorawan_config.nwk_skey);
+        // setAppSKey(lorawan_config.app_skey);
+    }
+
+    // Starts network and marks configuration as synchronized.
+    startNetwork();
+    lorawan_config_pending = false;
+    mode = NetworkMode::LoRaWAN;
+
+    return TxStatus::Ok;
+}
+
+
 
 

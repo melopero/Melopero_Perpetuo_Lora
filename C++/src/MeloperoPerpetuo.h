@@ -157,6 +157,13 @@ public:
     // Stop -> Select EMB preferences -> Apply stored EMBConfig -> Start.
     TxStatus startLoRaEMB(bool force = false);
 
+    // Starts LoRaWAN mode. When 'force' is true, the stored configuration is
+    // reapplied even if it is already in sync. The sequence performs:
+    // Stop -> Select LoRaWAN preferences -> Apply stored LoRaWANConfig -> Start.
+    TxStatus startLoRaWAN(bool force = false);
+
+
+
 
     // Stores the given LoRaWAN configuration without applying it to the module.
     void setLoRaWANConfig(const LoRaWANConfig& cfg);
