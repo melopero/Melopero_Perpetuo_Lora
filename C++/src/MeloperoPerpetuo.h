@@ -59,6 +59,10 @@
 #define CODING_RATE_4_7 0x03
 #define CODING_RATE_4_8 0x04
 
+// Network operating mode.
+enum class NetworkMode { None, LoRaEMB, LoRaWAN };
+
+
 class MeloperoPerpetuo {
 public:
     MeloperoPerpetuo();
@@ -89,6 +93,10 @@ public:
     uint8_t response[256];  // Response buffer
     size_t responseLen;     // Length of the response
 
+    // Returns the current network operating mode.
+    NetworkMode getMode() const;
+
+
     // Charger Status Functions
     int getChargerStatus();
     bool isCharging();
@@ -113,8 +121,12 @@ private:
     uint8_t calculateChecksum(uint8_t* data, size_t length);
     void buildPacket(uint8_t messageId, uint8_t* payload, size_t payloadLen, uint8_t* packet, size_t* packetLen);
     
-    
     void enableFlowControl(uint32_t baudRate, bool enable);
+
+    // Tracks the current network mode and whether the module is running.
+    NetworkMode mode = NetworkMode::None;
+    bool network_running = false;
+
 
     // Pins and Ports
     static const int I2C_SDA_PIN = 24;

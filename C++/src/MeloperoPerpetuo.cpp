@@ -6,6 +6,11 @@
 
 // Constructor
 MeloperoPerpetuo::MeloperoPerpetuo() {
+
+    // Initializes network state.
+    mode = NetworkMode::None;
+    network_running = false;
+    
 }
 
 // Destructor
@@ -144,11 +149,18 @@ void MeloperoPerpetuo::reset() {
 void MeloperoPerpetuo::stopNetwork() {
     uint8_t command = CMD_STOP_NETWORK;
     sendCmd(command);
+
+    // Marks network as stopped and clears the active mode.
+    network_running = false;
+    mode = NetworkMode::None;
 }
 
 void MeloperoPerpetuo::startNetwork() {
     uint8_t command = CMD_START_NETWORK;
     sendCmd(command);
+
+    // Marks network as running. The concrete mode is set by startLoRaEMB/LoRaWAN.
+    network_running = true;
 }
 
 void MeloperoPerpetuo::setNetworkPreferences(bool useLoRaWan, bool enableAutoJoining, bool enableADR) {
@@ -246,6 +258,12 @@ void MeloperoPerpetuo::enableFlowControl(uint32_t baudRate, bool enable) {
     uart_set_hw_flow(UART_PORT, enable, enable);
     uart_set_baudrate(UART_PORT, baudRate);
 }
+
+NetworkMode MeloperoPerpetuo::getMode() const {
+    // Returns the last known operating mode.
+    return mode;
+}
+
 
 
 // Charger Status Functions
