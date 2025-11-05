@@ -111,6 +111,7 @@ public:
 
     // LoRa Module Functions
     void sendCmd(uint8_t command, uint8_t* payload = nullptr, size_t payloadLen = 0);
+    
     // Sends user data over LoRa EMB using the current configuration.
     // The header format is [options_H][options_L][addr_H][addr_L][payload...].
     // By default, 'dest_addr' = 0xFFFF (broadcast) and 'options' = 0x0000.
@@ -119,6 +120,12 @@ public:
                     uint16_t dest_addr = 0xFFFF,
                     uint16_t options   = 0x0000);
 
+    // Sends an uplink over LoRaWAN using the stored defaults unless overridden.
+    // 'fport_override' < 0 uses default_fport; 'confirmed_override' < 0 uses default_confirmed.
+    // Returns Ok when the frame has been queued to the module.
+    TxStatus transmitLoRaWAN(const uint8_t* data, size_t len,
+                            int fport_override = -1,
+                            int confirmed_override = -1);
 
     void reset();
     void stopNetwork();

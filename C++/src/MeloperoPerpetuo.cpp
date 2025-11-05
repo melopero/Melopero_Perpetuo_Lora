@@ -100,6 +100,49 @@ void MeloperoPerpetuo::transmitEMB(const uint8_t* data,
     sendCmd(CMD_SEND_DATA, payload, idx);
 }
 
+TxStatus MeloperoPerpetuo::transmitLoRaWAN(const uint8_t* data, size_t len,
+                                           int fport_override,
+                                           int confirmed_override) {
+    // Ensures LoRaWAN mode is active prior to transmission.
+    if (mode != NetworkMode::LoRaWAN) {
+        return TxStatus::InvalidArgs; // Not running in LoRaWAN mode.
+    }
+
+    // Selects FPort and confirmed flag from overrides or defaults.
+    const uint8_t fport = (fport_override >= 0) ? (uint8_t)fport_override
+                                                : lorawan_config.default_fport;
+    const bool confirmed = (confirmed_override >= 0)
+                         ? (bool)confirmed_override
+                         : lorawan_config.default_confirmed;
+
+    // Builds the SEND_DATA payload for LoRaWAN:
+    // [options_H][options_L][Fport][app_data...]
+    // Use option bits per module doc; 0x0C00 is commonly "confirmed uplink".
+    uint16_t options = confirmed ? 0x0C00 : 0x0000;
+
+    // Length guard.
+    if (len + 3 > MAX_PACKET_SIZE) {
+        len = MAX_PACKET_SIZE - 3;
+    }
+
+    uint8_t payload[MAX_PACKET_SIZE];
+    size_t idx = 0;
+
+    payload[idx++] = (uint8_t)((options >> 8) & 0xFF);
+    payload[idx++] = (uint8_t)(options & 0xFF);
+    payload[idx++] = fport;
+
+    if (data && len > 0) {
+        memcpy(&payload[idx], data, len);
+        idx += len;
+    }
+
+    // Sends the frame to the module; response can be inspected via processExecStatus().
+    sendCmd(CMD_SEND_DATA, payload, idx);
+    return TxStatus::Ok;
+}
+
+
 
 
 // LoRa Helper Functions
