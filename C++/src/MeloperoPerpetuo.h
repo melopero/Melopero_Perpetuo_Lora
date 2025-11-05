@@ -119,6 +119,16 @@ public:
     // Validates the provided EMB configuration values.
     bool validateEMBConfig(const EMBConfig& cfg) const;
 
+    // Generic return code for start/tx helpers.
+    // 'InvalidArgs' is returned when the provided configuration is not valid.
+    enum class TxStatus { Ok, InvalidArgs };
+
+    // Starts LoRa EMB mode. When 'force' is true, the stored configuration is
+    // reapplied even if it is already in sync. The sequence performs:
+    // Stop -> Select EMB preferences -> Apply stored EMBConfig -> Start.
+    TxStatus startLoRaEMB(bool force = false);
+
+
 
 
     // Charger Status Functions
