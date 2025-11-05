@@ -116,6 +116,15 @@ public:
 
     void printResponse();
 
+    // Returns the execution status byte from the last response.
+    // Returns 0xFF if unavailable (e.g., response too short).
+    uint8_t getExecStatus() const;
+
+    // Prints the execution status and basic optional fields when present.
+    // Intended as a quick diagnostic after commands such as CMD_SEND_DATA.
+    void processExecStatus() const;
+
+
 private:
     // LoRa Private Methods
     uint8_t calculateChecksum(uint8_t* data, size_t length);

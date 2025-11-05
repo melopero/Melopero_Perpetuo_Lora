@@ -10,7 +10,7 @@ MeloperoPerpetuo::MeloperoPerpetuo() {
     // Initializes network state.
     mode = NetworkMode::None;
     network_running = false;
-    
+
 }
 
 // Destructor
@@ -368,3 +368,52 @@ void MeloperoPerpetuo::printResponse() {
         printf("\n");
     }
 }
+
+// Maps an execution status byte to a human-readable description.
+static const char* exec_status_str(uint8_t s) {
+    switch (s) {
+        case 0x00: return "OK";
+        case 0x01: return "Generic error (network not started?)";
+        case 0x02: return "Invalid parameter";
+        case 0x03: return "Timeout (no ACK)";
+        case 0x04: return "No memory (reserved)";
+        case 0x05: return "Unsupported option";
+        case 0x06: return "Busy (channel activity, denied)";
+        case 0x07: return "Duty-cycle limit";
+        default:   return "Unknown status";
+    }
+}
+
+// Returns the first payload byte (execution status) if present; 0xFF otherwise.
+uint8_t MeloperoPerpetuo::getExecStatus() const {
+    if (responseLen >= 4) return response[3];
+    return 0xFF;
+}
+
+// Prints the execution status and, when available, retries and ACK RSSI fields.
+// This function assumes the last response follows the standard EBI frame layout:
+// [len_H][len_L][resp_id][status][optional...][checksum].
+void MeloperoPerpetuo::processExecStatus() const {
+    if (responseLen < 4) {
+        printf("No valid response (len=%u)\n", (unsigned)responseLen);
+        return;
+    }
+
+    const uint8_t status = response[3];
+    printf("Execution status: 0x%02X (%s)\n", status, exec_status_str(status));
+
+    // Best-effort parse of optional fields when present:
+    // - retries: 1 byte at payload index 1 (overall index 4)
+    // - ACK RSSI: 2 bytes (signed) at payload index 2..3 (overall 5..6)
+    size_t idx = 4;
+    if (idx < responseLen - 1) {
+        const uint8_t retries = response[idx++];
+        printf("Retries: %u\n", retries);
+    }
+    if (idx + 1 < responseLen - 1) {
+        const int16_t ack_rssi = (int16_t)((response[idx] << 8) | response[idx + 1]);
+        // idx += 2; // advance if more fields are parsed in the future
+        printf("ACK RSSI: %d dBm\n", ack_rssi);
+    }
+}
+
