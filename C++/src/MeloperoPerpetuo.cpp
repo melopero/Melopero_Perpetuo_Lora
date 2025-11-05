@@ -456,5 +456,40 @@ bool MeloperoPerpetuo::validateEMBConfig(const EMBConfig& cfg) const {
     return true;
 }
 
+TxStatus MeloperoPerpetuo::startLoRaEMB(bool force) {
+    // Skips unnecessary restart when already in EMB mode, configuration is applied,
+    // and no forced reapply is requested.
+    if (mode == NetworkMode::LoRaEMB && emb_config_pending == false && !force) {
+        return TxStatus::Ok;
+    }
+
+    // Validates the stored configuration before applying.
+    if (!validateEMBConfig(emb_config)) {
+        return TxStatus::InvalidArgs;
+    }
+
+    // Stops current network (required before changing radio options).
+    stopNetwork();
+
+    // Selects EMB as operating protocol (no LoRaWAN, no auto-join, no ADR).
+    setNetworkPreferences(false, false, false);
+
+    // Applies the stored EMB configuration (no start/stop inside setters).
+    setOutputPower(emb_config.power);
+    setOperatingChannel(emb_config.channel, emb_config.sf, emb_config.bw, emb_config.cr);
+    setNetworkAddress(emb_config.net_addr);
+    if (emb_config.net_id && emb_config.net_id_len) {
+        setNetworkId((uint8_t*)emb_config.net_id, emb_config.net_id_len);
+    }
+    setEnergySaveMode(emb_config.energy);
+
+    // Starts the network and marks configuration as synchronized.
+    startNetwork();
+    emb_config_pending = false;
+    mode = NetworkMode::LoRaEMB;
+
+    return TxStatus::Ok;
+}
+
 
 
