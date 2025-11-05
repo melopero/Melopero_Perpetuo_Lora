@@ -6,6 +6,14 @@
 
 // Constructor
 MeloperoPerpetuo::MeloperoPerpetuo() {
+
+    // Initializes network state.
+    mode = NetworkMode::None;
+    network_running = false;
+
+    // Marks default EMB configuration as pending until first apply.
+    emb_config_pending = true;
+
 }
 
 // Destructor
@@ -60,41 +68,81 @@ void MeloperoPerpetuo::sendCmd(uint8_t command, uint8_t* payload, size_t payload
 
 
 
-void MeloperoPerpetuo::transmitData(const uint8_t* data, size_t length, uint16_t dest_addr, uint16_t options) {
-    // Payload structure:
-    // [options_H][options_L][addr_H][addr_L][user_data...]
-    //
-    // Default values:
-    // options = 0x0000 → 00 00
-    // dest_addr = 0xFFFF → FF FF
-    //
-    // → Payload header: 00 00 FF FF + user data bytes
+void MeloperoPerpetuo::transmitEMB(const uint8_t* data,
+                                   size_t length,
+                                   uint16_t dest_addr,
+                                   uint16_t options) {
+    // Builds the EMB packet header and sends it through UART.
+    // Payload layout: [options_H][options_L][addr_H][addr_L][user_data...]
 
-    // Ensure the total packet does not exceed buffer size
     if (length + 4 > MAX_PACKET_SIZE) {
-        length = MAX_PACKET_SIZE - 4; // truncate safely
+        length = MAX_PACKET_SIZE - 4;  // Prevents overflow of internal buffer.
     }
 
     uint8_t payload[MAX_PACKET_SIZE];
     size_t idx = 0;
 
-    // Add "options" (big-endian)
+    // Add "options" field (big-endian).
     payload[idx++] = static_cast<uint8_t>((options >> 8) & 0xFF);
     payload[idx++] = static_cast<uint8_t>(options & 0xFF);
 
-    // Add destination address (big-endian)
+    // Add destination address (big-endian).
     payload[idx++] = static_cast<uint8_t>((dest_addr >> 8) & 0xFF);
     payload[idx++] = static_cast<uint8_t>(dest_addr & 0xFF);
 
-    // Copy user data after header
+    // Copy user data after the 4-byte header.
     if (data && length > 0) {
         memcpy(&payload[idx], data, length);
         idx += length;
     }
 
-    // Send the assembled payload through the standard LoRa command
+    // Sends the assembled frame to the module.
     sendCmd(CMD_SEND_DATA, payload, idx);
 }
+
+TxStatus MeloperoPerpetuo::transmitLoRaWAN(const uint8_t* data, size_t len,
+                                           int fport_override,
+                                           int confirmed_override) {
+    // Ensures LoRaWAN mode is active prior to transmission.
+    if (mode != NetworkMode::LoRaWAN) {
+        return TxStatus::InvalidArgs; // Not running in LoRaWAN mode.
+    }
+
+    // Selects FPort and confirmed flag from overrides or defaults.
+    const uint8_t fport = (fport_override >= 0) ? (uint8_t)fport_override
+                                                : lorawan_config.default_fport;
+    const bool confirmed = (confirmed_override >= 0)
+                         ? (bool)confirmed_override
+                         : lorawan_config.default_confirmed;
+
+    // Builds the SEND_DATA payload for LoRaWAN:
+    // [options_H][options_L][Fport][app_data...]
+    // Use option bits per module doc; 0x0C00 is commonly "confirmed uplink".
+    uint16_t options = confirmed ? 0x0C00 : 0x0000;
+
+    // Length guard.
+    if (len + 3 > MAX_PACKET_SIZE) {
+        len = MAX_PACKET_SIZE - 3;
+    }
+
+    uint8_t payload[MAX_PACKET_SIZE];
+    size_t idx = 0;
+
+    payload[idx++] = (uint8_t)((options >> 8) & 0xFF);
+    payload[idx++] = (uint8_t)(options & 0xFF);
+    payload[idx++] = fport;
+
+    if (data && len > 0) {
+        memcpy(&payload[idx], data, len);
+        idx += len;
+    }
+
+    // Sends the frame to the module; response can be inspected via processExecStatus().
+    sendCmd(CMD_SEND_DATA, payload, idx);
+    return TxStatus::Ok;
+}
+
+
 
 
 // LoRa Helper Functions
@@ -144,11 +192,18 @@ void MeloperoPerpetuo::reset() {
 void MeloperoPerpetuo::stopNetwork() {
     uint8_t command = CMD_STOP_NETWORK;
     sendCmd(command);
+
+    // Marks network as stopped and clears the active mode.
+    network_running = false;
+    mode = NetworkMode::None;
 }
 
 void MeloperoPerpetuo::startNetwork() {
     uint8_t command = CMD_START_NETWORK;
     sendCmd(command);
+
+    // Marks network as running. The concrete mode is set by startLoRaEMB/LoRaWAN.
+    network_running = true;
 }
 
 void MeloperoPerpetuo::setNetworkPreferences(bool useLoRaWan, bool enableAutoJoining, bool enableADR) {
@@ -246,6 +301,47 @@ void MeloperoPerpetuo::enableFlowControl(uint32_t baudRate, bool enable) {
     uart_set_hw_flow(UART_PORT, enable, enable);
     uart_set_baudrate(UART_PORT, baudRate);
 }
+
+NetworkMode MeloperoPerpetuo::getMode() const {
+    // Returns the last known operating mode.
+    return mode;
+}
+
+void MeloperoPerpetuo::setLoRaWANConfig(const LoRaWANConfig& cfg) {
+    // Stores configuration (application occurs on startLoRaWAN()).
+    lorawan_config = cfg;
+    lorawan_config_pending = true;  // Marks configuration as pending.
+}
+
+LoRaWANConfig MeloperoPerpetuo::getLoRaWANConfig() const {
+    // Returns a copy of the stored configuration.
+    return lorawan_config;
+}
+
+bool MeloperoPerpetuo::validateLoRaWANConfig(const LoRaWANConfig& cfg) const {
+    // Region range check (module-specific; adjust mapping as required).
+    if (cfg.region > 0x02) return false; // example: 0x00=EU868, 0x01=US915, 0x02=2.4GHz
+
+    // Class check: accepts 0x01 (A) or 0x00 (C).
+    if (cfg.klass != 0x01 && cfg.klass != 0x00) return false;
+
+    // FPort range (LoRaWAN spec: 1..223 for application traffic).
+    if (cfg.default_fport == 0 || cfg.default_fport > 223) return false;
+
+    if (cfg.use_otaa) {
+        // OTAA requires JoinEUI(8), DevEUI(8), AppKey(16).
+        if (cfg.join_eui_len != 8 || cfg.dev_eui_len != 8 || cfg.app_key_len != 16) return false;
+        if (!cfg.join_eui || !cfg.dev_eui || !cfg.app_key) return false;
+    } else {
+        // ABP requires NwkSKey(16) and AppSKey(16). DevAddr may be 0 only if assigned later.
+        if (cfg.nwk_skey_len != 16 || cfg.app_skey_len != 16) return false;
+        if (!cfg.nwk_skey || !cfg.app_skey) return false;
+        // No strict check on dev_addr here; leave to application policy or region rules.
+    }
+
+    return true;
+}
+
 
 
 // Charger Status Functions
@@ -350,3 +446,177 @@ void MeloperoPerpetuo::printResponse() {
         printf("\n");
     }
 }
+
+// Maps an execution status byte to a human-readable description.
+static const char* exec_status_str(uint8_t s) {
+    switch (s) {
+        case 0x00: return "OK";
+        case 0x01: return "Generic error (network not started?)";
+        case 0x02: return "Invalid parameter";
+        case 0x03: return "Timeout (no ACK)";
+        case 0x04: return "No memory (reserved)";
+        case 0x05: return "Unsupported option";
+        case 0x06: return "Busy (channel activity, denied)";
+        case 0x07: return "Duty-cycle limit";
+        default:   return "Unknown status";
+    }
+}
+
+// Returns the first payload byte (execution status) if present; 0xFF otherwise.
+uint8_t MeloperoPerpetuo::getExecStatus() const {
+    if (responseLen >= 4) return response[3];
+    return 0xFF;
+}
+
+// Prints the execution status and, when available, retries and ACK RSSI fields.
+// This function assumes the last response follows the standard EBI frame layout:
+// [len_H][len_L][resp_id][status][optional...][checksum].
+void MeloperoPerpetuo::processExecStatus() const {
+    if (responseLen < 4) {
+        printf("No valid response (len=%u)\n", (unsigned)responseLen);
+        return;
+    }
+
+    const uint8_t status = response[3];
+    printf("Execution status: 0x%02X (%s)\n", status, exec_status_str(status));
+
+    // Best-effort parse of optional fields when present:
+    // - retries: 1 byte at payload index 1 (overall index 4)
+    // - ACK RSSI: 2 bytes (signed) at payload index 2..3 (overall 5..6)
+    size_t idx = 4;
+    if (idx < responseLen - 1) {
+        const uint8_t retries = response[idx++];
+        printf("Retries: %u\n", retries);
+    }
+    if (idx + 1 < responseLen - 1) {
+        const int16_t ack_rssi = (int16_t)((response[idx] << 8) | response[idx + 1]);
+        // idx += 2; // advance if more fields are parsed in the future
+        printf("ACK RSSI: %d dBm\n", ack_rssi);
+    }
+}
+
+void MeloperoPerpetuo::setEMBConfig(const EMBConfig& cfg) {
+    // Stores configuration (application occurs on startLoRaEMB()).
+    emb_config = cfg;
+    emb_config_pending = true;  // Marks configuration as pending.
+}
+
+EMBConfig MeloperoPerpetuo::getEMBConfig() const {
+    // Returns a copy of the stored configuration.
+    return emb_config;
+}
+
+bool MeloperoPerpetuo::validateEMBConfig(const EMBConfig& cfg) const {
+    // TX power: generic safe ceiling (adjust to module limits if needed).
+    if (cfg.power > 0x14) return false;
+
+    // Channel: generic 1..16 (adjust if your module provides a different map).
+    if (cfg.channel < 1 || cfg.channel > 16) return false;
+
+    // Spreading Factor: SF7..SF12.
+    if (cfg.sf < SPREADING_FACTOR_7 || cfg.sf > SPREADING_FACTOR_12) return false;
+
+    // Bandwidth: 125 or 250 kHz.
+    if (cfg.bw != BANDWIDTH_125 && cfg.bw != BANDWIDTH_250) return false;
+
+    // Coding rate: 4/5..4/8.
+    if (cfg.cr < CODING_RATE_4_5 || cfg.cr > CODING_RATE_4_8) return false;
+
+    // Optional Network ID coherence.
+    if (cfg.net_id_len > 0 && cfg.net_id == nullptr) return false;
+
+    // Energy save mode: 0..2 (ALWAYS_ON, RX_WINDOW, TX_ONLY).
+    if (cfg.energy > ENERGY_SAVE_MODE_TX_ONLY) return false;
+
+    return true;
+}
+
+TxStatus MeloperoPerpetuo::startLoRaEMB(bool force) {
+    // Skips unnecessary restart when already in EMB mode, configuration is applied,
+    // and no forced reapply is requested.
+    if (mode == NetworkMode::LoRaEMB && emb_config_pending == false && !force) {
+        return TxStatus::Ok;
+    }
+
+    // Validates the stored configuration before applying.
+    if (!validateEMBConfig(emb_config)) {
+        return TxStatus::InvalidArgs;
+    }
+
+    // Stops current network (required before changing radio options).
+    stopNetwork();
+
+    // Selects EMB as operating protocol (no LoRaWAN, no auto-join, no ADR).
+    setNetworkPreferences(false, false, false);
+
+    // Applies the stored EMB configuration (no start/stop inside setters).
+    setOutputPower(emb_config.power);
+    setOperatingChannel(emb_config.channel, emb_config.sf, emb_config.bw, emb_config.cr);
+    setNetworkAddress(emb_config.net_addr);
+    if (emb_config.net_id && emb_config.net_id_len) {
+        setNetworkId((uint8_t*)emb_config.net_id, emb_config.net_id_len);
+    }
+    setEnergySaveMode(emb_config.energy);
+
+    // Starts the network and marks configuration as synchronized.
+    startNetwork();
+    emb_config_pending = false;
+    mode = NetworkMode::LoRaEMB;
+
+    return TxStatus::Ok;
+}
+
+TxStatus MeloperoPerpetuo::startLoRaWAN(bool force) {
+    // Skips unnecessary restart when already in LoRaWAN mode, configuration is
+    // applied, and no forced reapply is requested.
+    if (mode == NetworkMode::LoRaWAN && lorawan_config_pending == false && !force) {
+        return TxStatus::Ok;
+    }
+
+    // Validates the stored configuration before applying.
+    if (!validateLoRaWANConfig(lorawan_config)) {
+        return TxStatus::InvalidArgs;
+    }
+
+    // Stops network before changing radio options and credentials.
+    stopNetwork();
+
+    // Selects LoRaWAN and options (auto-join and ADR).
+    setNetworkPreferences(true, lorawan_config.auto_join, lorawan_config.adr);
+
+    // Maps LoRaWAN class to energy mode: A -> RX_WINDOW, C -> ALWAYS_ON.
+    const uint8_t energy = (lorawan_config.klass == 0x01)
+                         ? ENERGY_SAVE_MODE_RX_WINDOW
+                         : ENERGY_SAVE_MODE_ALWAYS_ON;
+    setEnergySaveMode(energy);
+
+    // (Optional) Set region if a dedicated command exists in your module.
+    // Example placeholder:
+    // sendCmd(CMD_SET_REGION, &lorawan_config.region, 1);
+
+    // Apply credentials:
+    if (lorawan_config.use_otaa) {
+        // OTAA requires JoinEUI(8), DevEUI(8), AppKey(16).
+        // Replace the following placeholders with your concrete setters or sendCmd:
+        // setJoinEUI(lorawan_config.join_eui);
+        // setDevEUI(lorawan_config.dev_eui);
+        // setAppKey(lorawan_config.app_key);
+    } else {
+        // ABP requires DevAddr, NwkSKey, AppSKey (16B each).
+        // Replace placeholders with your concrete setters or sendCmd:
+        // setDevAddr(lorawan_config.dev_addr);
+        // setNwkSKey(lorawan_config.nwk_skey);
+        // setAppSKey(lorawan_config.app_skey);
+    }
+
+    // Starts network and marks configuration as synchronized.
+    startNetwork();
+    lorawan_config_pending = false;
+    mode = NetworkMode::LoRaWAN;
+
+    return TxStatus::Ok;
+}
+
+
+
+
