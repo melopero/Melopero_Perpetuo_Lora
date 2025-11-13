@@ -1,5 +1,3 @@
-## [Unreleased]
-
 ### Added
 - Extended `TxStatus` enumeration to cover additional LoRaWAN execution results
   (generic error, timeout, unsupported option, channel busy, duty cycle limit, no response).
