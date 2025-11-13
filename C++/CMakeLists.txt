@@ -14,6 +14,7 @@ pico_sdk_init()
 # Add subdirectories for each example
 add_subdirectory(examples/lora_emb_tx_test)
 add_subdirectory(examples/lora_emb_rx_test)
+add_subdirectory(examples/lorawan_tx_test)
 
 
 # Add the src directory
