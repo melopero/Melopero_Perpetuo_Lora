@@ -24,6 +24,17 @@
 #define CMD_SET_NETWORK_ID 0x22
 #define CMD_SET_ENERGY_SAVE_MODE 0x13
 #define CMD_SEND_DATA 0x50
+#define CMD_GET_NETWORK_STATUS        0x19
+
+
+// LoRaWAN-specific commands (from ebi_lora_rev_2.1)
+#define CMD_SET_PHYSICAL_ADDRESS   0x20  // payload: [JoinEUI(8)][DevEUI(8)]
+#define CMD_SET_NETWORK_SECURITY   0x26  // payload: [selector][value...]; 0x01=AppKey, 0x00=NwkKey
+
+// Device / firmware info (EBI-LoRa rev1.0.1-3)
+#define CMD_FIRMWARE_VERSION 0x06  // response: 0x86 + 4B version
+// Device / firmware info (fallback if 0x06 unsupported)
+#define CMD_DEVICE_INFO 0x01  // response: 0x81 + payload
 
 // Buffer sizes
 #define CMD_SIZE 64
@@ -62,9 +73,19 @@
 // Network operating mode.
 enum class NetworkMode { None, LoRaEMB, LoRaWAN };
 
-// Generic return code for start/tx helpers.
-// 'InvalidArgs' is returned when the provided configuration is not valid.
-enum class TxStatus { Ok, InvalidArgs };
+
+// High-level transmission result codes used by EMB and LoRaWAN helpers.
+enum class TxStatus : uint8_t {
+    Ok = 0,
+    InvalidArgs,
+    Error,
+    Timeout,
+    Unsupported,
+    ChannelBusy,
+    DutyCycle,
+    NoResponse
+};
+
 
 // LoRa EMB runtime configuration. Defaults are valid at boot.
 struct EMBConfig {
@@ -115,6 +136,7 @@ public:
 
     // LoRa Module Functions
     void sendCmd(uint8_t command, uint8_t* payload = nullptr, size_t payloadLen = 0);
+    void sendCmdTimeout(uint8_t command, uint8_t* payload, size_t payloadLen, uint32_t timeout_ms);
     
     // Sends user data over LoRa EMB using the current configuration.
     // The header format is [options_H][options_L][addr_H][addr_L][payload...].
@@ -142,6 +164,12 @@ public:
     void setEnergySaveMode(uint8_t save_mode);
     bool checkRxFifo(uint32_t timeoutMs);
     bool readRxFifo(uint8_t* response, size_t* responseLen, size_t maxBufferSize);
+
+    // Get firmware version as 4 bytes; returns true on success.
+    bool getFirmwareVersion(uint8_t out[4]);
+
+    // Print firmware version as "FW: XX XX XX XX".
+    void printFirmwareVersion();
 
     // rx buffer
     uint8_t response[256];  // Response buffer
